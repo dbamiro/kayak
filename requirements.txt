@@ -1,0 +1,22 @@
+# DMV Apartment Intelligence — Python stack
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+pydantic>=2.7.0
+pydantic-settings>=2.2.0
+
+# Database
+psycopg[binary]>=3.1.0
+psycopg-pool>=3.2.0
+
+# Crawler / parsing
+httpx>=0.27.0
+beautifulsoup4>=4.12.0
+lxml>=5.2.0
+playwright>=1.44.0
+
+# Scheduling / CLI
+apscheduler>=3.10.0
+python-dotenv>=1.0.0
+
+# Tests (optional dev)
+pytest>=8.2.0

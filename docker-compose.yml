@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: dmv_user
+      POSTGRES_PASSWORD: dmv_pass
+      POSTGRES_DB: dmv_apartments
+    ports:
+      - "5432:5432"
+    volumes:
+      - dmv_pg_data:/var/lib/postgresql/data
+
+volumes:
+  dmv_pg_data:
