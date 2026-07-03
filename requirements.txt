@@ -3,6 +3,10 @@ fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
 pydantic>=2.7.0
 pydantic-settings>=2.2.0
+python-multipart>=0.0.9
+PyJWT>=2.8.0
+bcrypt>=4.1.0
+email-validator>=2.0.0
 
 # Database
 psycopg[binary]>=3.1.0
@@ -17,6 +21,9 @@ playwright>=1.44.0
 # Scheduling / CLI
 apscheduler>=3.10.0
 python-dotenv>=1.0.0
+
+# Payments (optional)
+stripe>=10.0.0
 
 # Tests (optional dev)
 pytest>=8.2.0

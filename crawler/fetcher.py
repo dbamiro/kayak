@@ -41,7 +41,7 @@ class FetchResult:
 @dataclass
 class FetchOptions:
     wait_selector: str | None = None
-    wait_until: Literal["commit", "domcontentloaded", "load", "networkidle"] = "networkidle"
+    wait_until: Literal["commit", "domcontentloaded", "load", "domcontentloaded"] = "domcontentloaded"
     screenshot_path: str | None = None
 
 

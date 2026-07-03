@@ -1,9 +1,27 @@
 .venv/
 __pycache__/
 *.py[cod]
-.env
 .pytest_cache/
 .mypy_cache/
 *.egg-info/
 dist/
 build/
+
+# Local secrets and env backups (never commit)
+.env
+.env.*
+!.env.example
+!.env.production.example
+web/.env.local
+web/.env.*.local
+!web/.env.local.example
+
+# Real inventory CSV (never commit leasing data)
+verified_specials.csv
+data/
+
+# Build artifacts and scratch
+tmp/
+web/node_modules/
+web/.next/
+*.bak

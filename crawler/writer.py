@@ -16,6 +16,7 @@ from psycopg import Connection
 from models.canonical_listing import CanonicalListing
 from normalize.rents import compute_all_in_monthly, compute_effective_rent
 from normalize.scores import leasing_pressure_score, negotiation_score
+from app.services.crawl_incentive_service import concession_dict_from_text, persist_crawled_incentive
 from crawler.persist import prior_base_rent
 
 logger = logging.getLogger(__name__)
@@ -182,7 +183,7 @@ def persist_canonical_listing(
     lease_months = 12
     structured_conc: dict[str, Any] = {}
     if canonical.concession_text:
-        structured_conc = {"raw_text": canonical.concession_text}
+        structured_conc = concession_dict_from_text(canonical.concession_text)
     structured_fees: dict[str, Any] = {}
     if canonical.fee_text:
         structured_fees = {"raw_text": canonical.fee_text}
@@ -261,6 +262,20 @@ def persist_canonical_listing(
             """,
             (str(snapshot_id), canonical.fee_text, canonical.confidence_score),
         )
+
+    persist_crawled_incentive(
+        conn,
+        building_id=building_id,
+        listing_id=listing_id,
+        listing_snapshot_id=snapshot_id,
+        concession_text=canonical.concession_text,
+        fee_text=canonical.fee_text,
+        listed_rent=int(base),
+        lease_term_months=lease_months,
+        source_url=canonical.source_url,
+        parser_name=pn,
+        parser_confidence=canonical.confidence_score,
+    )
 
     conn.commit()
     return listing_id

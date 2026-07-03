@@ -1,0 +1,1 @@
+"""Monetization helpers (copy, constants)."""

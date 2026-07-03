@@ -1,6 +1,8 @@
--- DMV Apartment Intelligence — PostgreSQL schema (MVP + parser pipeline)
--- Run: psql $DATABASE_URL -f sql/schema.sql
--- Existing DBs created from an older schema: also run sql/migrations/002_parser_pipeline.sql
+-- Kayak v1 baseline schema (empty database bootstrap only).
+-- Production: ALLOW_PROD_BOOTSTRAP=yes ./scripts/bootstrap_prod_db.sh
+--   (applies this file once, then sql/migrations/*.sql, then seed_plans.sql — never demo seeds)
+-- Dev: ./scripts/bootstrap_db.sh
+-- Incremental changes belong in sql/migrations/*.sql (source of truth). See docs/DATABASE.md.
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
@@ -50,16 +52,21 @@ CREATE TABLE crawl_runs (
 );
 
 CREATE TABLE sources (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    building_id     UUID NOT NULL REFERENCES buildings (id) ON DELETE CASCADE,
-    url             TEXT NOT NULL,
-    source_type     TEXT NOT NULL DEFAULT 'direct_site',
-    crawl_strategy  fetch_mode NOT NULL DEFAULT 'http',
-    wait_selector   TEXT,
-    active          BOOLEAN NOT NULL DEFAULT true,
-    notes           TEXT,
-    metadata        JSONB NOT NULL DEFAULT '{}'::jsonb,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    building_id         UUID NOT NULL REFERENCES buildings (id) ON DELETE CASCADE,
+    url                 TEXT NOT NULL,
+    source_type         TEXT NOT NULL DEFAULT 'direct_site',
+    crawl_strategy      fetch_mode NOT NULL DEFAULT 'http',
+    wait_selector       TEXT,
+    active              BOOLEAN NOT NULL DEFAULT true,
+    notes               TEXT,
+    metadata            JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_crawl_at       TIMESTAMPTZ,
+    last_crawl_status   TEXT,
+    last_error          TEXT,
+    last_listings_count INTEGER,
+    last_parser_used    TEXT,
     UNIQUE (building_id, url)
 );
 
@@ -182,11 +189,152 @@ CREATE TABLE raw_captures (
 
 CREATE INDEX idx_raw_building_time ON raw_captures (building_id, captured_at DESC);
 
-CREATE TABLE alerts (
+-- --- Monetization (plans, users, checkout, deal unlocks, concierge) ---
+
+CREATE TABLE users (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    email           TEXT,
-    label           TEXT,
-    criteria        JSONB NOT NULL,
-    active          BOOLEAN NOT NULL DEFAULT true,
+    email           TEXT NOT NULL UNIQUE,
+    name            TEXT,
+    password_hash   TEXT,
+    email_verified  BOOLEAN NOT NULL DEFAULT false,
+    is_admin        BOOLEAN NOT NULL DEFAULT false,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE refresh_tokens (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id         UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    token_hash      TEXT NOT NULL,
+    expires_at      TIMESTAMPTZ NOT NULL,
+    revoked_at      TIMESTAMPTZ,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE INDEX idx_refresh_user ON refresh_tokens (user_id);
+CREATE INDEX idx_refresh_hash ON refresh_tokens (token_hash);
+
+CREATE TABLE alerts (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id             UUID REFERENCES users (id) ON DELETE CASCADE,
+    email               TEXT,
+    label               TEXT,
+    name                TEXT,
+    criteria            JSONB NOT NULL,
+    alert_type          TEXT NOT NULL DEFAULT 'general',
+    active              BOOLEAN NOT NULL DEFAULT true,
+    last_triggered_at   TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_alerts_user ON alerts (user_id);
+
+CREATE TABLE saved_buildings (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id         UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    building_id     UUID NOT NULL REFERENCES buildings (id) ON DELETE CASCADE,
+    note            TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (user_id, building_id)
+);
+
+CREATE INDEX idx_saved_buildings_user ON saved_buildings (user_id);
+
+CREATE TABLE plans (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    code            TEXT NOT NULL UNIQUE,
+    name            TEXT NOT NULL,
+    price_cents     INTEGER NOT NULL DEFAULT 0,
+    currency        TEXT NOT NULL DEFAULT 'USD',
+    duration_days   INTEGER,
+    plan_type       TEXT NOT NULL DEFAULT 'subscription',
+    description     TEXT,
+    is_active       BOOLEAN NOT NULL DEFAULT true,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE customer_entitlements (
+    id                      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id                 UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    plan_code               TEXT NOT NULL REFERENCES plans (code) ON DELETE RESTRICT,
+    starts_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at              TIMESTAMPTZ,
+    status                  TEXT NOT NULL DEFAULT 'active',
+    source                  TEXT NOT NULL DEFAULT 'mock',
+    stripe_customer_id      TEXT,
+    stripe_subscription_id  TEXT,
+    stripe_payment_intent_id TEXT,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at              TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_entitlements_user_status ON customer_entitlements (user_id, status);
+CREATE INDEX idx_entitlements_expires ON customer_entitlements (expires_at);
+
+CREATE TABLE checkout_sessions (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id             UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    plan_code           TEXT NOT NULL REFERENCES plans (code) ON DELETE RESTRICT,
+    stripe_session_id   TEXT,
+    amount_cents        INTEGER NOT NULL,
+    currency            TEXT NOT NULL DEFAULT 'USD',
+    status              TEXT NOT NULL DEFAULT 'created',
+    checkout_url        TEXT,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_checkout_user ON checkout_sessions (user_id, created_at DESC);
+
+CREATE TABLE deal_report_unlocks (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id         UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    building_id     UUID NOT NULL REFERENCES buildings (id) ON DELETE CASCADE,
+    unit_id         UUID REFERENCES units (id) ON DELETE SET NULL,
+    floorplan_id    UUID REFERENCES floorplans (id) ON DELETE SET NULL,
+    unlocked_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    source            TEXT NOT NULL DEFAULT 'entitlement',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_deal_unlocks_user_building ON deal_report_unlocks (user_id, building_id);
+
+CREATE TABLE concierge_requests (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id         UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    status          TEXT NOT NULL DEFAULT 'submitted',
+    target_city     TEXT,
+    budget_min      NUMERIC(12, 2),
+    budget_max      NUMERIC(12, 2),
+    bedrooms        NUMERIC(4, 1),
+    commute_target  TEXT,
+    notes             TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_concierge_user ON concierge_requests (user_id, created_at DESC);
+
+CREATE TABLE stripe_webhook_events (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    stripe_event_id     TEXT NOT NULL UNIQUE,
+    event_type          TEXT NOT NULL,
+    status              TEXT NOT NULL DEFAULT 'received',
+    processed_at        TIMESTAMPTZ,
+    raw_payload         JSONB,
+    error_message       TEXT,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+INSERT INTO plans (code, name, price_cents, currency, duration_days, plan_type, description, is_active)
+VALUES
+    ('free', 'Free', 0, 'USD', NULL, 'free',
+     'Browse listings, basic signals, and Deal Report previews.', true),
+    ('hunt_pass_30', 'Premium Hunt Pass (30 days)', 1900, 'USD', 30, 'subscription',
+     'Unlimited Deal Reports, full rent history, fee breakdown, negotiation tools, alerts, compare.', true),
+    ('premium_plus_30', 'Premium Plus (30 days)', 3900, 'USD', 30, 'subscription',
+     'Everything in Hunt Pass plus enhanced report export and decision-support placeholders.', true),
+    ('concierge_one_time', 'Concierge (one-time)', 14900, 'USD', NULL, 'one_time',
+     'Human-assisted shortlist and negotiation help — fulfillment is manual (placeholder).', true)
+ON CONFLICT (code) DO NOTHING;

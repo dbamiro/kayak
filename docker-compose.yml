@@ -9,6 +9,39 @@ services:
       - "5432:5432"
     volumes:
       - dmv_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dmv_user -d dmv_apartments"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://dmv_user:dmv_pass@postgres:5432/dmv_apartments
+      JWT_SECRET: local-dev-change-me-not-for-production
+      MOCK_AUTH_MODE: "true"
+      MOCK_CHECKOUT_MODE: "true"
+      SHOW_DEMO_DATA: "true"
+      CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./web
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+      NEXT_PUBLIC_APP_NAME: Kayak DMV
+    depends_on:
+      - api
 
 volumes:
   dmv_pg_data:

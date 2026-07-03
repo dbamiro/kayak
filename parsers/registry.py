@@ -7,13 +7,17 @@ from typing import Any
 
 from models.canonical_listing import CanonicalListing
 from parsers.base import BaseParser
+from parsers.floorplan_cards_html_parser import FloorplanCardsHtmlParser
 from parsers.generic_html import GenericHtmlApartmentParser
 from parsers.next_data_parser import NextDataParser
+from parsers.rentcafe_html_parser import RentcafeHtmlParser
 
 logger = logging.getLogger(__name__)
 
 PARSER_REGISTRY: list[BaseParser] = [
     NextDataParser(),
+    RentcafeHtmlParser(),
+    FloorplanCardsHtmlParser(),
     GenericHtmlApartmentParser(),
 ]
 
@@ -61,4 +65,8 @@ def get_parser_by_name(name: str) -> BaseParser:
         return NextDataParser()
     if name == "generic_html":
         return GenericHtmlApartmentParser()
+    if name == "rentcafe_html":
+        return RentcafeHtmlParser()
+    if name == "floorplan_cards_html":
+        return FloorplanCardsHtmlParser()
     return mapping[name]
