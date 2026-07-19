@@ -57,7 +57,9 @@ def _process_source_row(
     scrape_ts: datetime,
 ) -> dict[str, Any]:
     """Fetch, persist raw, parse, and write listings for one source row."""
-    sid, bid, url, strat, wait_sel, bname = row
+    # Row: (source_id, building_id, url, strategy, wait_selector, name[, use_proxy])
+    sid, bid, url, strat, wait_sel, bname = row[:6]
+    use_proxy = bool(row[6]) if len(row) > 6 else False
     building_id = bid if isinstance(bid, UUID) else UUID(str(bid))
     source_id = UUID(str(sid)) if sid else None
 
@@ -80,7 +82,7 @@ def _process_source_row(
     if sid is None and default_fetch_mode is not None:
         mode = default_fetch_mode
 
-    opts = FetchOptions(wait_selector=wait_sel)
+    opts = FetchOptions(wait_selector=wait_sel, use_proxy=use_proxy)
 
     try:
         result = fetch_url(str(url), mode, opts)
@@ -224,7 +226,7 @@ def run_building_crawl(
         if source_id is not None:
             sql = """
                 SELECT s.id, s.building_id, s.url, s.crawl_strategy::text,
-                       s.wait_selector, b.name
+                       s.wait_selector, b.name, s.use_proxy
                 FROM sources s
                 JOIN buildings b ON b.id = s.building_id
                 WHERE s.id = %s
@@ -233,7 +235,7 @@ def run_building_crawl(
         else:
             sql = """
                 SELECT s.id, s.building_id, s.url, s.crawl_strategy::text,
-                       s.wait_selector, b.name
+                       s.wait_selector, b.name, s.use_proxy
                 FROM sources s
                 JOIN buildings b ON b.id = s.building_id
                 WHERE s.active = true

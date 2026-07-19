@@ -59,6 +59,8 @@ CREATE TABLE sources (
     crawl_strategy      fetch_mode NOT NULL DEFAULT 'http',
     wait_selector       TEXT,
     active              BOOLEAN NOT NULL DEFAULT true,
+    -- Route this source through the configured proxy (requires PROXY_ENABLED=true).
+    use_proxy           BOOLEAN NOT NULL DEFAULT false,
     notes               TEXT,
     metadata            JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),

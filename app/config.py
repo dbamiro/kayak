@@ -59,6 +59,16 @@ class Settings(BaseSettings):
     # Pending user/crawler incentives without expires_at expire after N days
     pending_incentive_ttl_days: int = 90
 
+    # Crawler proxy (disabled by default; public pages only — never to bypass
+    # Cloudflare, CAPTCHAs, logins, or explicit blocks). See docs/CRAWLER_PROXY.md.
+    proxy_enabled: bool = False
+    proxy_provider: str = "decodo"  # decodo | bright_data | custom
+    proxy_http_url: str = ""
+    proxy_https_url: str = ""
+    proxy_max_retries: int = 1
+    proxy_timeout_seconds: float = 20.0
+    proxy_monthly_gb_budget: float = 2.0  # operator budget hint; not enforced in code
+
     def is_production(self) -> bool:
         return self.app_env.lower() in ("production", "prod")
 

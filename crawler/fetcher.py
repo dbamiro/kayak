@@ -14,6 +14,7 @@ import httpx
 from playwright.sync_api import sync_playwright
 
 from app.config import get_settings
+from crawler.proxy import ProxyConfig, get_proxy_config, httpx_mounts, playwright_proxy_settings
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,17 @@ class FetchOptions:
     wait_selector: str | None = None
     wait_until: Literal["commit", "domcontentloaded", "load", "domcontentloaded"] = "domcontentloaded"
     screenshot_path: str | None = None
+    # Route this fetch through the configured proxy (only if PROXY_ENABLED=true).
+    # Public pages only — never to bypass Cloudflare/CAPTCHA/logins/blocks.
+    use_proxy: bool = False
+
+
+def _resolve_proxy(use_proxy: bool) -> ProxyConfig | None:
+    """Proxy config for this fetch, or None. Raises ProxyConfigError if the
+    proxy is requested and enabled but misconfigured (clear failure, no creds)."""
+    if not use_proxy:
+        return None
+    return get_proxy_config()
 
 
 def _hash_body(body: str) -> str:
@@ -71,17 +83,26 @@ def _rate_limit_gap() -> None:
     _last_fetch_monotonic = time.monotonic()
 
 
-def fetch_http(url: str) -> FetchResult:
+def fetch_http(url: str, *, use_proxy: bool = False) -> FetchResult:
     settings = get_settings()
     headers = {"User-Agent": settings.crawler_user_agent}
     timeout = settings.crawler_timeout_seconds
     max_retries = getattr(settings, "crawler_max_retries", 2)
     backoff = getattr(settings, "crawler_retry_backoff_seconds", 1.5)
 
+    proxy = _resolve_proxy(use_proxy)
+    client_kwargs: dict = {}
+    if proxy is not None:
+        client_kwargs["mounts"] = httpx_mounts(proxy)
+        timeout = proxy.timeout_seconds
+        max_retries = proxy.max_retries
+        # Log provider only — proxy URLs contain credentials.
+        logger.info("fetch_via_proxy provider=%s url=%s", proxy.provider, url)
+
     _rate_limit_gap()
 
     last_exc: Exception | None = None
-    with httpx.Client(headers=headers, timeout=timeout, follow_redirects=True) as client:
+    with httpx.Client(headers=headers, timeout=timeout, follow_redirects=True, **client_kwargs) as client:
         for attempt in range(max_retries + 1):
             try:
                 resp = client.get(url)
@@ -115,13 +136,20 @@ def fetch_playwright(url: str, options: FetchOptions | None = None) -> FetchResu
     timeout_ms = int(settings.crawler_timeout_seconds * 1000)
     screenshot_on_error = getattr(settings, "playwright_screenshot_on_error", False)
 
+    proxy = _resolve_proxy(opts.use_proxy)
+    launch_kwargs: dict = {"headless": settings.playwright_headless}
+    if proxy is not None:
+        launch_kwargs["proxy"] = playwright_proxy_settings(proxy)
+        timeout_ms = int(proxy.timeout_seconds * 1000)
+        logger.info("fetch_via_proxy provider=%s url=%s", proxy.provider, url)
+
     _rate_limit_gap()
 
     page = None
     body = ""
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=settings.playwright_headless)
+            browser = p.chromium.launch(**launch_kwargs)
             try:
                 context = browser.new_context(user_agent=settings.crawler_user_agent)
                 page = context.new_page()
@@ -155,7 +183,7 @@ def fetch_playwright(url: str, options: FetchOptions | None = None) -> FetchResu
 
 def fetch_url(url: str, mode: FetchMode, options: FetchOptions | None = None) -> FetchResult:
     if mode == FetchMode.HTTP:
-        return fetch_http(url)
+        return fetch_http(url, use_proxy=bool(options and options.use_proxy))
     if mode == FetchMode.PLAYWRIGHT:
         return fetch_playwright(url, options)
     raise ValueError(f"Unsupported fetch mode: {mode}")
