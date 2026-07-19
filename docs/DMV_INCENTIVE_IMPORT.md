@@ -8,6 +8,10 @@ Load the first **30–75 real** apartment move-in specials into production. Kaya
 
 Related: [VERIFIED_INCENTIVES.md](VERIFIED_INCENTIVES.md) · [LAUNCH_CHECKLIST.md](../LAUNCH_CHECKLIST.md) §6
 
+For a shorter local-only walkthrough (hide demos, establish an admin, preflight,
+import, and verify the web app), use
+[REAL_DATA_QUICKSTART.md](../REAL_DATA_QUICKSTART.md).
+
 ---
 
 ## Workflow (summary)

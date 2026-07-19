@@ -12,6 +12,10 @@ Bulk-load verified DMV apartment move-in specials from a spreadsheet export.
 
 **Operational workflow (first 30–75 real specials):** [DMV_INCENTIVE_IMPORT.md](DMV_INCENTIVE_IMPORT.md) — blank template, field guide, quality checklist, dry-run and import commands.
 
+**Local quickstart:** [REAL_DATA_QUICKSTART.md](../REAL_DATA_QUICKSTART.md) —
+hide demo data, configure an admin, run preflight, import, and verify `/search`
+and `/specials`.
+
 ### CSV columns
 
 | Column | Required | Notes |

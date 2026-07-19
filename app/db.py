@@ -17,6 +17,7 @@ def get_pool() -> ConnectionPool:
             min_size=1,
             max_size=10,
             kwargs={"autocommit": False},
+            open=True,  # explicit: future psycopg_pool releases default to open=False
         )
     return _pool
 

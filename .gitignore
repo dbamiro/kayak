@@ -18,7 +18,18 @@ web/.env.*.local
 
 # Real inventory CSV (never commit leasing data)
 verified_specials.csv
+real_specials.csv
+*.real.csv
 data/
+real-data/
+real_data/
+
+# Local verification artifacts (screenshots, leasing-office downloads)
+screenshots/
+local-screenshots/
+local_screenshots/
+leasing-office-files/
+leasing_office_files/
 
 # Build artifacts and scratch
 tmp/
